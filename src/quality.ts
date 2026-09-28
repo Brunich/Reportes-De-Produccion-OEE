@@ -18,6 +18,26 @@ const tidy = (v: string) => (/^\p{Lu}/u.test(v) ? 2 : 0) + (/[À-ſ]/.test(v) ? 
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+// CURP: el último carácter es un dígito verificador sobre los 17 anteriores.
+const CURP_ABC = '0123456789ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
+export function curpOk(v: string) {
+ if (!/^[A-Z][AEIOUX][A-Z]{2}\d{6}[HMX][A-Z]{2}[B-DF-HJ-NP-TV-Z]{3}[A-Z\d]\d$/.test(v)) return false;
+ const sum = [...v.slice(0, 17)].reduce((s, ch, i) => s + CURP_ABC.indexOf(ch) * (18 - i), 0);
+ return (10 - sum % 10) % 10 === Number(v[17]);
+}
+const upper = (v: string) => v.toUpperCase().replace(/[\s.-]/g, '');
+const MX: { col: RegExp; name: [string, string]; bad: string; rule: [string, string]; ok: (v: string) => boolean; fmt: (v: string) => string }[] = [
+ { col: /^rfc\b|\brfc$/, name: ['RFC', 'RFC'], bad: 'RFC inválido', rule: ['3 o 4 letras, 6 dígitos de fecha y 3 de homoclave', '3–4 letters, 6 date digits, 3-char check'],
+  ok: v => /^[A-ZÑ&]{3,4}\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[A-Z\d]{3}$/.test(v), fmt: upper },
+ { col: /^curp\b|\bcurp$/, name: ['CURP', 'CURP'], bad: 'CURP inválida', rule: ['18 caracteres con dígito verificador', '18 chars with check digit'], ok: curpOk, fmt: upper },
+ { col: /correo|e-?mail|^mail$/, name: ['correo', 'email'], bad: 'Correo inválido', rule: ['nombre@dominio.algo', 'name@domain.tld'],
+  ok: v => /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(v), fmt: v => v.toLowerCase().replace(/\s/g, '') },
+ { col: /telefono|tel\b|^tel|celular|whats|movil/, name: ['teléfono', 'phone'], bad: 'Teléfono inválido', rule: ['10 dígitos', '10 digits'],
+  ok: v => /^\d{10}$/.test(v), fmt: v => { const d = v.replace(/\D/g, ''); return d.length === 12 && d.startsWith('52') ? d.slice(2) : d.length === 13 && d.startsWith('521') ? d.slice(3) : d; } },
+ { col: /^(c\.? ?p\.?|codigo postal|cod postal)$/, name: ['código postal', 'postal code'], bad: 'CP inválido', rule: ['5 dígitos', '5 digits'],
+  ok: v => /^\d{5}$/.test(v), fmt: v => /^\d{4}$/.test(v) ? '0' + v : v.replace(/\s/g, '') },
+];
+
 export function detectIssues(headers: string[], rows: string[][]): Issue[] {
  const issues: Issue[] = [];
  const col = (c: number) => rows.map(r => r[c] ?? '');
@@ -100,6 +120,23 @@ export function detectIssues(headers: string[], rows: string[][]): Issue[] {
   detail: [`${plural(spaced.length, 'celda empieza o termina', 'celdas empiezan o terminan')} con espacios: «Pintura» y «Pintura » no cuentan como lo mismo.`, `${plural(spaced.length, 'cell starts or ends', 'cells start or end')} with spaces: “Paint” and “Paint ” don’t count as the same.`],
   example: `«${rows[spaced[0][0]][spaced[0][1]]}» → «${rows[spaced[0][0]][spaced[0][1]].trim()}»`, cells: spaced,
   fix: rs => rs.map(r => r.map(v => v.trim())), fixLabel: ['Recortar', 'Trim'], fixDone: [`Recorté espacios en ${plural(spaced.length, 'celda', 'celdas')}`, `Trimmed ${plural(spaced.length, 'cell', 'cells')}`] });
+
+ // 8. Datos de México: RFC, CURP, correo, teléfono y código postal. Lo que se arregla sólo con dar formato
+ // (mayúsculas, guiones, lada +52, el cero que Excel le quita al CP) se corrige; lo que sigue mal se marca.
+ headers.forEach((h, c) => {
+  const spec = MX.find(m => m.col.test(fold(h)));
+  if (!spec) return;
+  const bad = col(c).map((v, i) => [i, v.trim()] as const).filter(([, v]) => v && !spec.ok(v));
+  if (!bad.length) return;
+  const fixable = bad.filter(([, v]) => spec.ok(spec.fmt(v)));
+  const [, first] = fixable[0] ?? bad[0];
+  issues.push({ id: `mx-${c}`, severity: fixable.length ? 'low' : 'medium', column: c, title: [`${spec.bad} en «${h}»`, `Invalid ${spec.name[1]} in “${h}”`],
+   detail: [`${plural(bad.length, 'valor no cumple', 'valores no cumplen')} el formato de ${spec.name[0]} (${spec.rule[0]}).${fixable.length ? ` ${plural(fixable.length, 'se corrige', 'se corrigen')} sólo con dar formato.` : ''}${bad.length > fixable.length ? ` ${plural(bad.length - fixable.length, 'queda', 'quedan')} para revisar a mano.` : ''}`,
+    `${plural(bad.length, 'value does not', 'values do not')} match the ${spec.name[1]} format (${spec.rule[1]}).${fixable.length ? ` ${fixable.length} fixed by formatting alone.` : ''}${bad.length > fixable.length ? ` ${bad.length - fixable.length} left to review by hand.` : ''}`],
+   example: fixable.length ? `${first} → ${spec.fmt(first)}` : first, cells: bad.map(([i]) => [i, c] as [number, number]),
+   ...(fixable.length ? { fix: (rs: string[][]) => rs.map(r => r.map((v, j) => j === c && v.trim() && !spec.ok(v.trim()) && spec.ok(spec.fmt(v.trim())) ? spec.fmt(v.trim()) : v)),
+    fixLabel: ['Dar formato', 'Format'] as [string, string], fixDone: [`Di formato a ${plural(fixable.length, 'valor', 'valores')} en «${h}»`, `Formatted ${plural(fixable.length, 'value', 'values')} in “${h}”`] as [string, string] } : {}) });
+ });
 
  const order: Record<Severity, number> = { high: 0, medium: 1, low: 2, info: 3 };
  return issues.sort((a, b) => order[a.severity] - order[b.severity]);
