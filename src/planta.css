@@ -173,3 +173,4 @@ html[data-motion=paused] .pl-day-bar i{animation:none}
 .pl-defects li{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto auto;gap:10px;align-items:center;font-size:14px}
 .pl-defects i{height:8px;border-radius:9px;background:#ffffff10;display:block}.pl-defects b{display:block;height:100%;border-radius:9px;background:#e3c780}
 .pl-defects em{font-style:normal;font-weight:650}.pl-defects small{color:var(--muted)}
+.pl-oee-def{font:italic 400 15px var(--serif);color:var(--muted);margin-left:8px}

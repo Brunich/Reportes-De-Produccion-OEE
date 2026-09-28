@@ -112,7 +112,7 @@ export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLi
   if ([l.plan, l.prod, l.prog, l.ciclo].some(Number.isNaN)) ex.push({ rule: 'dato', severity: 'media', text: ['Hay un número vacío o mal escrito en producción', 'A number in production is blank or malformed'], where: at(l) });
  });
  orphans.forEach(o => ex.push({ rule: 'sin-produccion', severity: 'alta', text: ['Inspección de un lote que no aparece en producción (¿lote mal escrito?)', 'Inspection of a batch missing from production (typo?)'], where: at(o) }));
- stopList.forEach(s => { if (!s.causa && s.min >= 30) ex.push({ rule: 'paro', severity: 'media', text: [`Paro de ${s.min} min sin causa registrada`, `${s.min}-min stop with no cause`], where: `${s.linea} · ${s.fecha} · ${s.turno}` }); });
+ stopList.forEach(s => { if (!s.causa && s.min >= 30) ex.push({ rule: 'paro', severity: 'media', text: [`Detención de ${s.min} min sin causa registrada`, `${s.min}-min stop with no cause`], where: `${s.linea} · ${s.fecha} · ${s.turno}` }); });
 
  const names = [...new Set(lots.map(l => l.linea))].sort();
  const lines: LineOee[] = names.map(linea => lineOee(linea, lots, stopList));
@@ -140,7 +140,7 @@ export function summaryText(r: Result, es: boolean) {
   ...r.lines.map(l => `${l.linea}: OEE ${pct(l.oee)} (D ${pct(l.A)} · R ${pct(l.R)} · C ${pct(l.Q)})`),
   es ? `${r.exceptions.length} excepciones:` : `${r.exceptions.length} exceptions:`,
   ...r.exceptions.slice(0, 8).map(e => `• ${e.text[es ? 0 : 1]} — ${e.where}`),
-  r.pareto[0] ? (es ? `Paro principal: ${r.pareto[0][0]} (${r.pareto[0][1]} min)` : `Top stop: ${r.pareto[0][0]} (${r.pareto[0][1]} min)`) : '',
+  r.pareto[0] ? (es ? `Detención principal: ${r.pareto[0][0]} (${r.pareto[0][1]} min)` : `Top stop: ${r.pareto[0][0]} (${r.pareto[0][1]} min)`) : '',
  ].filter(Boolean).join('\n');
 }
 

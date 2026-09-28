@@ -35,11 +35,11 @@ function LineCard({ l, es, i, goal, onGoal }: { l: LineOee; es: boolean; i: numb
   </dl>
   <p className="pl-loss-title">{es ? 'Dónde se pierde el tiempo' : 'Where time is lost'} · {Math.round(loss)} min</p>
   <div className="pl-loss" aria-label={es ? 'Pérdidas' : 'Losses'}>
-   <i className="k-a" style={{ flexGrow: l.lossStops }} title={`${es ? 'Paros' : 'Stops'} ${Math.round(l.lossStops)} min`}/>
+   <i className="k-a" style={{ flexGrow: l.lossStops }} title={`${es ? 'Detenciones' : 'Stops'} ${Math.round(l.lossStops)} min`}/>
    <i className="k-r" style={{ flexGrow: l.lossSpeed }} title={`${es ? 'Velocidad' : 'Speed'} ${Math.round(l.lossSpeed)} min`}/>
    <i className="k-q" style={{ flexGrow: l.lossQuality }} title={`${es ? 'Rechazos' : 'Rejects'} ${Math.round(l.lossQuality)} min`}/>
   </div>
-  <p className="pl-loss-legend"><span className="k-a">{es ? 'paros' : 'stops'} {Math.round(l.lossStops)}</span><span className="k-r">{es ? 'velocidad' : 'speed'} {Math.round(l.lossSpeed)}</span><span className="k-q">{es ? 'rechazos' : 'rejects'} {Math.round(l.lossQuality)}</span></p>
+  <p className="pl-loss-legend"><span className="k-a">{es ? 'detenciones' : 'stops'} {Math.round(l.lossStops)}</span><span className="k-r">{es ? 'velocidad' : 'speed'} {Math.round(l.lossSpeed)}</span><span className="k-q">{es ? 'rechazos' : 'rejects'} {Math.round(l.lossQuality)}</span></p>
  </article>;
 }
 
@@ -105,7 +105,7 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
    {(['prod', 'qual', 'stops'] as FileKind[]).map((k, i) => {
     const s = slots[k], m = maps[i];
     return <div key={k} className={`pl-file${m?.missing.length ? ' bad' : s ? ' ok' : ''}`} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void load(k, e.dataTransfer.files?.[0]); }}>
-     <span className="pl-file-kind">{[t('1 · Producción', '1 · Production'), t('2 · Calidad', '2 · Quality'), t('3 · Paros (opcional)', '3 · Stops (optional)')][i]}</span>
+     <span className="pl-file-kind">{[t('1 · Producción', '1 · Production'), t('2 · Calidad', '2 · Quality'), t('3 · Detenciones (opcional)', '3 · Stops (optional)')][i]}</span>
      <div className="pl-file-name">{s && /\.xlsx?$/i.test(s.name) ? <FileXls size={26} weight="duotone"/> : <FileCsv size={26} weight="duotone"/>}<div><strong>{s?.name ?? t('Sin archivo', 'No file')}</strong><small>{s ? `${s.grid.rows.length} ${t('filas', 'rows')}${s.sample ? t(' · ejemplo', ' · sample') : ''}` : ''}</small></div></div>
      <ul className="pl-cols">{NEEDS[k].map(f => <li key={f} className={m && !m.missing.includes(f as never) ? 'on' : ''}>{es ? FIELD_ES[f] : f}</li>)}</ul>
      {m && m.missing.length > 0 && s && <div className="pl-miss"><p><WarningCircle size={15}/>{t('No reconocí estas columnas. Dime cuál es cuál:', 'I did not recognize these columns. Tell me which is which:')}</p>
@@ -125,12 +125,12 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
     <dl className="pl-kpis">
      <div><dt>{t('Lotes cruzados', 'Batches matched')}</dt><dd>{matched}<small>/{res.lots.length}</small></dd></div>
      <div className={res.exceptions.length ? 'warn' : ''}><dt>{t('Excepciones', 'Exceptions')}</dt><dd>{res.exceptions.length}</dd></div>
-     <div><dt>{t('Minutos de paro', 'Stop minutes')}</dt><dd>{stopTotal}</dd></div>
+     <div><dt>{t('Minutos detenida', 'Stop minutes')}</dt><dd>{stopTotal}</dd></div>
      <div><dt>{t('Piezas buenas', 'Good parts')}</dt><dd>{res.lines.reduce((s, l) => s + l.prod - l.rej, 0).toLocaleString('es-MX')}</dd></div>
     </dl>
    </section>
 
-   <h3 className="pl-h">{t('OEE por línea', 'OEE by line')}<span>{t('La marca del anillo es la meta de cada línea; cámbiala abajo.', 'The ring mark is each line’s goal; change it below.')}</span></h3>
+   <h3 className="pl-h">{t('OEE por línea', 'OEE by line')}<small className="pl-oee-def">{t('Eficiencia general del equipo', 'Overall equipment effectiveness')}</small><span>{t('La marca del anillo es la meta de cada línea; cámbiala abajo.', 'The ring mark is each line’s goal; change it below.')}</span></h3>
    <div className="pl-lines">{res.lines.map((l, i) => <LineCard key={l.linea} l={l} es={es} i={i} goal={goalOf(l.linea)} onGoal={g => setGoals(o => ({ ...o, [l.linea]: g }))}/>)}</div>
 
    {days.length > 1 && <section className="pl-days" aria-label={t('OEE por día', 'OEE by day')}>
@@ -158,12 +158,12 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
      {!shown.length && <p className="pl-ok"><CheckCircle size={18}/>{t('Sin incoherencias.', 'No inconsistencies.')}</p>}
     </section>
     <section className="pl-pareto">
-     <h3 className="pl-h">{t('Paros por causa', 'Stops by cause')}<span>{t('Pareto: arriba lo que más tiempo se come.', 'Pareto: the biggest time-eaters first.')}</span></h3>
+     <h3 className="pl-h">{t('Detenciones por causa', 'Stops by cause')}<span>{t('Pareto: arriba lo que más tiempo se come.', 'Pareto: the biggest time-eaters first.')}</span></h3>
      {res.pareto.length ? <ol>{res.pareto.map(([c, m], i) => <li key={c} style={{ ['--i' as string]: i }}><span>{c}</span><i><b style={{ width: `${m / stopMax * 100}%` }}/></i><em>{m} min</em><small>{Math.round(res.pareto.slice(0, i + 1).reduce((s, x) => s + x[1], 0) / stopTotal * 100)} %</small></li>)}</ol> : <p className="pl-ok">{t('Sin reporte de paros.', 'No stops report.')}</p>}
      {defects.length > 0 && <><h3 className="pl-h pl-h-shift">{t('Rechazos por defecto', 'Rejects by defect')}<span>{t('Pareto de calidad.', 'Quality Pareto.')}</span></h3>
      <ol className="pl-defects">{defects.map(([d, n], i) => <li key={d} style={{ ['--i' as string]: i }}><span>{d}</span><i><b style={{ width: `${n / defMax * 100}%` }}/></i><em>{n} {t('pzas', 'pcs')}</em><small>{Math.round(defects.slice(0, i + 1).reduce((s, x) => s + x[1], 0) / defTotal * 100)} %</small></li>)}</ol></>}
      <h3 className="pl-h pl-h-shift">{t('Por turno', 'By shift')}<span>{t('Mismo plan, distinto resultado: dónde mirar primero.', 'Same plan, different result: where to look first.')}</span></h3>
-     <table className="pl-shifts"><thead><tr><th scope="col">{t('Turno', 'Shift')}</th><th scope="col">{t('Plan', 'Plan')}</th><th scope="col">{t('Rechazo', 'Reject')}</th><th scope="col">{t('Paros', 'Stops')}</th></tr></thead>
+     <table className="pl-shifts"><thead><tr><th scope="col">{t('Turno', 'Shift')}</th><th scope="col">{t('Plan', 'Plan')}</th><th scope="col">{t('Rechazo', 'Reject')}</th><th scope="col">{t('Detenciones', 'Stops')}</th></tr></thead>
       <tbody>{res.shifts.map(sh => { const plan = sh.plan ? sh.prod / sh.plan : 0, rej = sh.rev ? sh.rej / sh.rev : 0;
        const worst = (k: 'plan' | 'rej' | 'stops') => res.shifts.length > 1 && res.shifts.every(o => k === 'plan' ? (o.plan ? o.prod / o.plan : 0) >= plan : k === 'rej' ? (o.rev ? o.rej / o.rev : 0) <= rej : o.stops <= sh.stops);
        return <tr key={sh.turno}><th scope="row">{es ? sh.turno : ({ Matutino: 'Morning', Vespertino: 'Evening', Nocturno: 'Night' } as Record<string, string>)[sh.turno] ?? sh.turno}<small>{sh.lots} {t('lotes', 'batches')}</small></th>
@@ -173,7 +173,7 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
    </div>
 
    <section className="pl-report">
-    <div><h3 className="pl-h">{t('Reporte del turno', 'Shift report')}</h3><p>{t('Excel con OEE, excepciones, consolidado, paros y defectos. O el resumen para WhatsApp.', 'Excel with OEE, exceptions, consolidated, stops and defects. Or the WhatsApp summary.')}</p></div>
+    <div><h3 className="pl-h">{t('Reporte del turno', 'Shift report')}</h3><p>{t('Excel con OEE, excepciones, consolidado, detenciones y defectos. O el resumen para WhatsApp.', 'Excel with OEE, exceptions, consolidated, stops and defects. Or the WhatsApp summary.')}</p></div>
     <div className="pl-report-actions">
      <button className="dw-primary" onClick={() => void report()}><DownloadSimple size={17}/>{t('Descargar Excel', 'Download Excel')}</button>
      <button onClick={async () => { try { await navigator.clipboard.writeText(summaryText(res, es)); setNote(t('Resumen copiado.', 'Summary copied.')); } catch { setNote(''); } }}><Copy size={17}/>{t('Copiar resumen', 'Copy summary')}</button>
