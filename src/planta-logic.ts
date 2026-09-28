@@ -126,6 +126,13 @@ export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLi
 }
 
 // Resumen para mandar por WhatsApp o pegar en un correo.
+// Rechazos por defecto (Pareto de calidad): cuántas piezas malas deja cada defecto, de mayor a menor.
+export function defectPareto(r: Result): [string, number][] {
+ const m = new Map<string, number>();
+ r.lots.forEach(l => { if (l.rej) m.set(l.defecto?.trim() || '(sin defecto registrado)', (m.get(l.defecto?.trim() || '(sin defecto registrado)') ?? 0) + l.rej); });
+ return [...m].sort((a, b) => b[1] - a[1]);
+}
+
 export function summaryText(r: Result, es: boolean) {
  const pct = (n: number) => `${(n * 100).toFixed(1)} %`;
  return [

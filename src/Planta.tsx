@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { FileXls, FileCsv, CheckCircle, WarningCircle, DownloadSimple, WhatsappLogo, Copy } from '@phosphor-icons/react';
 import { parseCsv } from './csv';
 import { readTable, TABLE_ACCEPT } from './read-file';
-import { byDay, consolidate, mapColumns, summaryText, NEEDS, SAMPLE_PROD, SAMPLE_QUAL, SAMPLE_STOPS } from './planta-logic';
+import { defectPareto, byDay, consolidate, mapColumns, summaryText, NEEDS, SAMPLE_PROD, SAMPLE_QUAL, SAMPLE_STOPS } from './planta-logic';
 import type { ColumnMap, Field, FileKind, Grid, LineOee } from './planta-logic';
 import { exportCsv } from './csv';
 import './planta.css';
@@ -16,19 +16,20 @@ const pct = (n: number) => `${(n * 100).toFixed(1)} %`;
 
 const readFile = (file: File): Promise<Grid> => readTable(file);
 
-function Ring({ value, size = 120, label }: { value: number; size?: number; label?: string }) {
- const tone = value >= .85 ? 'good' : value >= .65 ? 'mid' : 'low';
+function Ring({ value, size = 120, label, goal = .85 }: { value: number; size?: number; label?: string; goal?: number }) {
+ const tone = value >= goal ? 'good' : value >= goal - .2 ? 'mid' : 'low';
  return <div className={`pl-ring tone-${tone}`} style={{ width: size, height: size }}>
-  <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" className="pl-track"/><circle cx="60" cy="60" r="50" className="pl-arc" pathLength={100} style={{ strokeDashoffset: 100 - value * 100 }}/><circle cx="60" cy="60" r="50" className="pl-goal" pathLength={100} style={{ strokeDasharray: '0.6 99.4', strokeDashoffset: -85 }}/></svg>
+  <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" className="pl-track"/><circle cx="60" cy="60" r="50" className="pl-arc" pathLength={100} style={{ strokeDashoffset: 100 - value * 100 }}/><circle cx="60" cy="60" r="50" className="pl-goal" pathLength={100} style={{ strokeDasharray: '0.6 99.4', strokeDashoffset: -goal * 100 }}/></svg>
   <span><b>{(value * 100).toFixed(1)}</b><small>{label ?? '%'}</small></span>
  </div>;
 }
 
-function LineCard({ l, es, i }: { l: LineOee; es: boolean; i: number }) {
+function LineCard({ l, es, i, goal, onGoal }: { l: LineOee; es: boolean; i: number; goal: number; onGoal: (g: number) => void }) {
  const loss = l.lossStops + l.lossSpeed + l.lossQuality || 1;
  return <article className="pl-line" style={{ ['--i' as string]: i }}>
   <header><strong>{es ? 'Línea' : 'Line'} {l.linea.replace(/^L/, '')}</strong><span>{l.prod.toLocaleString('es-MX')} {es ? 'piezas' : 'parts'}</span></header>
-  <Ring value={l.oee} label="OEE %"/>
+  <Ring value={l.oee} label="OEE %" goal={goal}/>
+  <label className="pl-goal-in">{es ? 'Meta' : 'Goal'}<input type="number" min={30} max={99} value={Math.round(goal * 100)} onChange={e => onGoal(Math.min(99, Math.max(30, +e.target.value || 85)) / 100)}/>%<span className={l.oee >= goal ? 'up' : 'down'}>{l.oee >= goal ? '▲' : '▼'} {Math.abs((l.oee - goal) * 100).toFixed(1)}</span></label>
   <dl className="pl-arq">
    {([[es ? 'Disponibilidad' : 'Availability', l.A, 'a'], [es ? 'Rendimiento' : 'Performance', l.R, 'r'], [es ? 'Calidad' : 'Quality', l.Q, 'q']] as const).map(([k, v, c]) => <div key={c} className={`k-${c}`}><dt>{k}</dt><dd><i style={{ width: `${v * 100}%` }}/><b>{pct(v)}</b></dd></div>)}
   </dl>
@@ -46,6 +47,9 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
  const es = lang === 'es', L = es ? 0 : 1, t = (a: string, b: string) => es ? a : b;
  const [slots, setSlots] = useState<Record<FileKind, Slot | null>>(() => ({ prod: { name: SAMPLES.prod[0], grid: parseCsv(SAMPLES.prod[1]), sample: true }, qual: { name: SAMPLES.qual[0], grid: parseCsv(SAMPLES.qual[1]), sample: true }, stops: { name: SAMPLES.stops[0], grid: parseCsv(SAMPLES.stops[1]), sample: true } }));
  const [limit, setLimit] = useState(3);
+ // Meta de OEE por línea: 85 % es la referencia de clase mundial, pero cada línea tiene la suya.
+ const [goals, setGoals] = useState<Record<string, number>>({});
+ const goalOf = (linea: string) => goals[linea] ?? .85;
  const [err, setErr] = useState('');
  const [filter, setFilter] = useState('');
  const [note, setNote] = useState('');
@@ -71,6 +75,8 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
   const a = document.createElement('a'); a.href = url; a.download = 'excepciones_planta.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
  }
  const stopMax = res?.pareto[0]?.[1] ?? 1, stopTotal = res ? res.pareto.reduce((s, p) => s + p[1], 0) : 0;
+ const defects = useMemo(() => res ? defectPareto(res) : [], [res]), defMax = defects[0]?.[1] ?? 1, defTotal = defects.reduce((s, d) => s + d[1], 0);
+ const planGoal = res && res.lines.length ? res.lines.reduce((s, l) => s + goalOf(l.linea) * l.prog, 0) / (res.lines.reduce((s, l) => s + l.prog, 0) || 1) : .85;
 
  async function load(kind: FileKind, file: File | undefined) {
   if (!file) return;
@@ -90,7 +96,8 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[t('Severidad', 'Severity'), t('Excepción', 'Exception'), t('Dónde', 'Where')], ...res.exceptions.map(e => [e.severity, e.text[L], e.where])]), t('Excepciones', 'Exceptions'));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['fecha', 'turno', 'linea', 'lote', 'plan', 'producidas', 'revisadas', 'rechazadas', 'rechazo %', 'defecto'], ...res.lots.map(l => [l.fecha, l.turno, l.linea, l.lote, l.plan, l.prod, l.rev ?? '', l.rej ?? '', l.rev ? r4((l.rej ?? 0) / l.rev) : '', l.defecto ?? ''])]), 'Consolidado');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[t('Causa', 'Cause'), t('Minutos', 'Minutes'), t('% acumulado', 'Cumulative %')], ...res.pareto.map((p, i) => [p[0], p[1], r4(res.pareto.slice(0, i + 1).reduce((s, x) => s + x[1], 0) / (stopTotal || 1))])]), t('Paros', 'Stops'));
-  XLSX.writeFile(wb, 'reporte_planta.xlsx'); setNote(t('Reporte descargado: OEE, excepciones, consolidado y paros en cuatro hojas.', 'Report downloaded: OEE, exceptions, consolidated and stops in four sheets.'));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[t('Defecto', 'Defect'), t('Piezas rechazadas', 'Rejected parts'), t('% acumulado', 'Cumulative %')], ...defects.map((d, i) => [d[0], d[1], r4(defects.slice(0, i + 1).reduce((s, x) => s + x[1], 0) / (defTotal || 1))])]), t('Defectos', 'Defects'));
+  XLSX.writeFile(wb, 'reporte_planta.xlsx'); setNote(t('Reporte descargado: cinco hojas.', 'Report downloaded: five sheets.'));
  }
 
  return <div className="pl">
@@ -114,7 +121,7 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
 
   {res && <div className="pl-out" key={run}>
    <section className="pl-summary">
-    <div className="pl-total"><Ring value={res.total.oee} size={168} label={t('OEE de planta', 'Plant OEE')}/><p>{res.total.oee >= .85 ? t('Nivel de clase mundial (85 %).', 'World-class level (85%).') : t(`A ${((0.85 - res.total.oee) * 100).toFixed(1)} puntos del 85 % de clase mundial.`, `${((0.85 - res.total.oee) * 100).toFixed(1)} points below world-class 85%.`)}</p></div>
+    <div className="pl-total"><Ring value={res.total.oee} size={168} label={t('OEE de planta', 'Plant OEE')} goal={planGoal}/><p>{res.total.oee >= planGoal ? t(`Arriba de la meta (${Math.round(planGoal * 100)} %).`, `Above goal (${Math.round(planGoal * 100)}%).`) : t(`A ${((planGoal - res.total.oee) * 100).toFixed(1)} puntos de la meta de ${Math.round(planGoal * 100)} %.`, `${((planGoal - res.total.oee) * 100).toFixed(1)} points below the ${Math.round(planGoal * 100)}% goal.`)}</p></div>
     <dl className="pl-kpis">
      <div><dt>{t('Lotes cruzados', 'Batches matched')}</dt><dd>{matched}<small>/{res.lots.length}</small></dd></div>
      <div className={res.exceptions.length ? 'warn' : ''}><dt>{t('Excepciones', 'Exceptions')}</dt><dd>{res.exceptions.length}</dd></div>
@@ -123,11 +130,11 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
     </dl>
    </section>
 
-   <h3 className="pl-h">{t('OEE por línea', 'OEE by line')}<span>{t('Disponibilidad × rendimiento × calidad. La marca del anillo es el 85 %.', 'Availability × performance × quality. The ring mark is 85%.')}</span></h3>
-   <div className="pl-lines">{res.lines.map((l, i) => <LineCard key={l.linea} l={l} es={es} i={i}/>)}</div>
+   <h3 className="pl-h">{t('OEE por línea', 'OEE by line')}<span>{t('La marca del anillo es la meta de cada línea; cámbiala abajo.', 'The ring mark is each line’s goal; change it below.')}</span></h3>
+   <div className="pl-lines">{res.lines.map((l, i) => <LineCard key={l.linea} l={l} es={es} i={i} goal={goalOf(l.linea)} onGoal={g => setGoals(o => ({ ...o, [l.linea]: g }))}/>)}</div>
 
    {days.length > 1 && <section className="pl-days" aria-label={t('OEE por día', 'OEE by day')}>
-    <h3 className="pl-h">{t('OEE por día', 'OEE by day')}<span>{t('Sale de las fechas del reporte: sube una semana y ves la tendencia. La raya punteada es el 85 %.', 'Built from the report dates: upload a week to see the trend. The dashed line is 85%.')}</span></h3>
+    <h3 className="pl-h">{t('OEE por día', 'OEE by day')}<span>{t('Sube una semana y ves la tendencia. Raya punteada: 85 %.', 'Upload a week to see the trend. Dashed line: 85%.')}</span></h3>
     <div className="pl-days-chart" role="list">
      {days.map((d, i) => { const tone = d.oee >= .85 ? 'good' : d.oee >= .65 ? 'mid' : 'low', prev = days[i - 1];
       return <div key={d.fecha} className={`pl-day tone-${tone}`} role="listitem" title={d.lines.map(l => `${l.linea} ${pct(l.oee)}`).join(' · ')} style={{ ['--i' as string]: i }}>
@@ -153,6 +160,8 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
     <section className="pl-pareto">
      <h3 className="pl-h">{t('Paros por causa', 'Stops by cause')}<span>{t('Pareto: arriba lo que más tiempo se come.', 'Pareto: the biggest time-eaters first.')}</span></h3>
      {res.pareto.length ? <ol>{res.pareto.map(([c, m], i) => <li key={c} style={{ ['--i' as string]: i }}><span>{c}</span><i><b style={{ width: `${m / stopMax * 100}%` }}/></i><em>{m} min</em><small>{Math.round(res.pareto.slice(0, i + 1).reduce((s, x) => s + x[1], 0) / stopTotal * 100)} %</small></li>)}</ol> : <p className="pl-ok">{t('Sin reporte de paros.', 'No stops report.')}</p>}
+     {defects.length > 0 && <><h3 className="pl-h pl-h-shift">{t('Rechazos por defecto', 'Rejects by defect')}<span>{t('Pareto de calidad.', 'Quality Pareto.')}</span></h3>
+     <ol className="pl-defects">{defects.map(([d, n], i) => <li key={d} style={{ ['--i' as string]: i }}><span>{d}</span><i><b style={{ width: `${n / defMax * 100}%` }}/></i><em>{n} {t('pzas', 'pcs')}</em><small>{Math.round(defects.slice(0, i + 1).reduce((s, x) => s + x[1], 0) / defTotal * 100)} %</small></li>)}</ol></>}
      <h3 className="pl-h pl-h-shift">{t('Por turno', 'By shift')}<span>{t('Mismo plan, distinto resultado: dónde mirar primero.', 'Same plan, different result: where to look first.')}</span></h3>
      <table className="pl-shifts"><thead><tr><th scope="col">{t('Turno', 'Shift')}</th><th scope="col">{t('Plan', 'Plan')}</th><th scope="col">{t('Rechazo', 'Reject')}</th><th scope="col">{t('Paros', 'Stops')}</th></tr></thead>
       <tbody>{res.shifts.map(sh => { const plan = sh.plan ? sh.prod / sh.plan : 0, rej = sh.rev ? sh.rej / sh.rev : 0;
@@ -164,7 +173,7 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
    </div>
 
    <section className="pl-report">
-    <div><h3 className="pl-h">{t('Reporte del turno', 'Shift report')}</h3><p>{t('Cuatro hojas de Excel: OEE, excepciones, consolidado y paros. O el resumen corto para el grupo de WhatsApp.', 'Four Excel sheets: OEE, exceptions, consolidated and stops. Or the short summary for the WhatsApp group.')}</p></div>
+    <div><h3 className="pl-h">{t('Reporte del turno', 'Shift report')}</h3><p>{t('Excel con OEE, excepciones, consolidado, paros y defectos. O el resumen para WhatsApp.', 'Excel with OEE, exceptions, consolidated, stops and defects. Or the WhatsApp summary.')}</p></div>
     <div className="pl-report-actions">
      <button className="dw-primary" onClick={() => void report()}><DownloadSimple size={17}/>{t('Descargar Excel', 'Download Excel')}</button>
      <button onClick={async () => { try { await navigator.clipboard.writeText(summaryText(res, es)); setNote(t('Resumen copiado.', 'Summary copied.')); } catch { setNote(''); } }}><Copy size={17}/>{t('Copiar resumen', 'Copy summary')}</button>
