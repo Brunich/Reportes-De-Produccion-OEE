@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCsv } from '../src/csv.ts';
-import { consolidate, mapColumns, SAMPLE_PROD, SAMPLE_QUAL, SAMPLE_STOPS } from '../src/planta-logic.ts';
+import { consolidate, defectPareto, mapColumns, SAMPLE_PROD, SAMPLE_QUAL, SAMPLE_STOPS } from '../src/planta-logic.ts';
 
 const r = consolidate(parseCsv(SAMPLE_PROD), parseCsv(SAMPLE_QUAL), parseCsv(SAMPLE_STOPS));
 
@@ -66,4 +66,11 @@ test('OEE por día: un día por fecha del reporte, y cada uno entre 0 y 1', asyn
  assert.ok(days.every(d => d.oee > 0 && d.oee < 1 && d.lines.length === 3));
  // Un día con más paros tiene menos disponibilidad: el 9 tuvo 160 min de paro y el 10, 106.
  assert.ok(days[0].A < days[1].A);
+});
+
+test('Pareto de defectos: suma las piezas rechazadas de cada defecto, de mayor a menor', () => {
+ const d = defectPareto(r);
+ assert.ok(d.length > 1);
+ assert.equal(d.reduce((s, x) => s + x[1], 0), r.lots.reduce((s, l) => s + (l.rej ?? 0), 0));
+ assert.ok(d.every((x, i) => !i || x[1] <= d[i - 1][1]));
 });
