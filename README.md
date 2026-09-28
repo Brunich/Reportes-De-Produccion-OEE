@@ -4,7 +4,7 @@
 
 *Tres reportes, un OEE, cero copiar y pegar.*
 
-Subes el Excel de producción, el de calidad y el de paros del turno. Se cruzan solos, se marcan las incoherencias, el OEE de cada línea y el reporte listo en Excel.
+Subes el Excel de producción, el de calidad y el de detenciones del turno. Se cruzan solos, se marcan las incoherencias, sale el OEE (eficiencia general del equipo) de cada línea y el reporte listo en Excel.
 
 ![Captura de Planta: consolidador y OEE](docs/captura.png)
 
@@ -12,9 +12,9 @@ Subes el Excel de producción, el de calidad y el de paros del turno. Se cruzan 
 
 ## Cómo funciona
 
-1. **Sube.** Producción, calidad y paros en Excel o CSV. Reconoce las columnas por nombre, aunque vengan con acentos o en otro orden.
+1. **Sube.** Producción, calidad y detenciones en Excel o CSV. Reconoce las columnas por nombre, aunque vengan con acentos o en otro orden.
 2. **Cruza.** Une cada lote por fecha, turno y línea, y marca las incoherencias: lotes sin inspección, inspecciones de lotes que no existen, rechazo alto, plan incumplido.
-3. **Mide.** OEE por línea (disponibilidad × rendimiento × calidad), dónde se pierde el tiempo y el Pareto de paros. Sale en Excel o por WhatsApp.
+3. **Mide.** OEE (eficiencia general del equipo) por línea: disponibilidad × rendimiento × calidad, dónde se pierde el tiempo y el Pareto de detenciones. Sale en Excel o por WhatsApp.
 
 ## Qué hay adentro
 
