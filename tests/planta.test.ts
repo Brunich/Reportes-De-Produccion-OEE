@@ -58,3 +58,12 @@ test('el resumen por turno suma lo de cada turno', () => {
  assert.equal(r.shifts.reduce((a, s) => a + s.prod, 0), r.lots.reduce((a, l) => a + l.prod, 0));
  assert.equal(r.shifts.reduce((a, s) => a + s.stops, 0), r.pareto.reduce((a, p) => a + p[1], 0));
 });
+
+test('OEE por día: un día por fecha del reporte, y cada uno entre 0 y 1', async () => {
+ const { byDay } = await import('../src/planta-logic.ts');
+ const days = byDay(r);
+ assert.deepEqual(days.map(d => d.fecha), ['2026-03-09', '2026-03-10']);
+ assert.ok(days.every(d => d.oee > 0 && d.oee < 1 && d.lines.length === 3));
+ // Un día con más paros tiene menos disponibilidad: el 9 tuvo 160 min de paro y el 10, 106.
+ assert.ok(days[0].A < days[1].A);
+});

@@ -43,7 +43,7 @@ export function detectIssues(headers: string[], rows: string[][]): Issue[] {
  rows.forEach((r, i) => { const k = JSON.stringify(r.map(v => v.trim())); if (seen.has(k)) dup.push([i, seen.get(k)!]); else seen.set(k, i); });
  if (dup.length) issues.push({ id: 'dup', severity: 'medium', title: ['Filas repetidas', 'Duplicate rows'],
   detail: [cap(dup.map(([i, j]) => `la fila ${line(i)} repite la ${line(j)}`).join('; ')) + '. Pasa cuando un reporte se exporta dos veces.', cap(dup.map(([i, j]) => `row ${line(i)} repeats row ${line(j)}`).join('; ')) + '. Typical when a report is exported twice.'],
-  example: rows[dup[0][0]][0], cells: dup.flatMap(([i]) => headers.map((_, c) => [i, c] as [number, number])), rows: dup.map(([i]) => i),
+  example: `fila ${line(dup[0][0])} = fila ${line(dup[0][1])} → se queda una`, cells: dup.flatMap(([i]) => headers.map((_, c) => [i, c] as [number, number])), rows: dup.map(([i]) => i),
   fix: rs => { const s = new Set<string>(); return rs.filter(r => { const k = JSON.stringify(r.map(v => v.trim())); if (s.has(k)) return false; s.add(k); return true; }); },
   fixLabel: ['Quitar repetidas', 'Remove duplicates'], fixDone: [`Quité ${plural(dup.length, 'fila repetida', 'filas repetidas')}`, `Removed ${plural(dup.length, 'duplicate row', 'duplicate rows')}`] });
 
@@ -60,7 +60,7 @@ export function detectIssues(headers: string[], rows: string[][]): Issue[] {
    const forms = messy.map(g => [...g.keys()].map(f => `«${f}»`).join(' / '));
    issues.push({ id: `case-${c}`, severity: 'medium', column: c, title: [`«${h}» escrito de varias formas`, `“${h}” written several ways`],
     detail: [`${forms.join('; ')}. Para contar y agrupar deben ser un solo valor; se unifica con la forma más usada.`, `${forms.join('; ')}. To count and group they must be one value; unified to the most common form.`],
-    example: forms[0], cells,
+    example: cells.length ? `«${values[cells[0][0]].trim()}» → «${canon.get(fold(values[cells[0][0]]))}»` : forms[0], cells,
     fix: rs => rs.map(r => r.map((v, j) => j === c && v.trim() && canon.has(fold(v)) ? canon.get(fold(v))! : v)),
     fixLabel: ['Unificar', 'Unify'], fixDone: [`Unifiqué ${plural(cells.length, 'valor', 'valores')} en «${h}»`, `Unified ${plural(cells.length, 'value', 'values')} in “${h}”`] });
   }
@@ -98,7 +98,7 @@ export function detectIssues(headers: string[], rows: string[][]): Issue[] {
  rows.forEach((r, i) => r.forEach((v, c) => { if (v !== v.trim()) spaced.push([i, c]); }));
  if (spaced.length) issues.push({ id: 'trim', severity: 'low', title: ['Espacios sobrantes', 'Extra spaces'],
   detail: [`${plural(spaced.length, 'celda empieza o termina', 'celdas empiezan o terminan')} con espacios: «Pintura» y «Pintura » no cuentan como lo mismo.`, `${plural(spaced.length, 'cell starts or ends', 'cells start or end')} with spaces: “Paint” and “Paint ” don’t count as the same.`],
-  example: `«${rows[spaced[0][0]][spaced[0][1]]}»`, cells: spaced,
+  example: `«${rows[spaced[0][0]][spaced[0][1]]}» → «${rows[spaced[0][0]][spaced[0][1]].trim()}»`, cells: spaced,
   fix: rs => rs.map(r => r.map(v => v.trim())), fixLabel: ['Recortar', 'Trim'], fixDone: [`Recorté espacios en ${plural(spaced.length, 'celda', 'celdas')}`, `Trimmed ${plural(spaced.length, 'cell', 'cells')}`] });
 
  const order: Record<Severity, number> = { high: 0, medium: 1, low: 2, info: 3 };

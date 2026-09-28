@@ -50,6 +50,34 @@ export type LineOee = { linea: string; prog: number; stops: number; run: number;
 export type ShiftSum = { turno: string; plan: number; prod: number; rev: number; rej: number; stops: number; lots: number };
 export type Result = { shifts: ShiftSum[]; lots: Lot[]; orphans: { fecha: string; turno: string; linea: string; lote: string; rev: number; rej: number }[]; stops: Stop[]; exceptions: Exception[]; lines: LineOee[]; total: { A: number; R: number; Q: number; oee: number }; pareto: [string, number][] };
 
+// OEE de una línea con sus lotes y paros: disponibilidad × rendimiento × calidad, y en qué se perdió el tiempo.
+function lineOee(linea: string, lots: Lot[], stopList: Stop[]): LineOee {
+ const ls = lots.filter(l => l.linea === linea && !Number.isNaN(l.prod) && !Number.isNaN(l.prog));
+ const prog = ls.reduce((s, l) => s + l.prog, 0), stopsMin = stopList.filter(s => s.linea === linea).reduce((s, x) => s + x.min, 0);
+ const run = Math.max(0, prog - stopsMin), ideal = ls.reduce((s, l) => s + (l.ciclo || 0) * l.prod / 60, 0);
+ const prodSum = ls.reduce((s, l) => s + l.prod, 0), rej = ls.reduce((s, l) => s + (l.rej ?? 0), 0);
+ const A = prog ? run / prog : 0, R = run ? Math.min(1, ideal / run) : 0, Q = prodSum ? (prodSum - rej) / prodSum : 0;
+ const avgCycle = prodSum ? ideal / prodSum : 0;
+ return { linea, prog, stops: stopsMin, run, ideal, prod: prodSum, rej, A, R, Q, oee: A * R * Q, lossStops: stopsMin, lossSpeed: Math.max(0, run - ideal), lossQuality: rej * avgCycle };
+}
+function totalOf(lines: LineOee[]) {
+ const T = lines.reduce((t, l) => ({ prog: t.prog + l.prog, run: t.run + l.run, ideal: t.ideal + l.ideal, prod: t.prod + l.prod, rej: t.rej + l.rej }), { prog: 0, run: 0, ideal: 0, prod: 0, rej: 0 });
+ const A = T.prog ? T.run / T.prog : 0, R = T.run ? Math.min(1, T.ideal / T.run) : 0, Q = T.prod ? (T.prod - T.rej) / T.prod : 0;
+ return { A, R, Q, oee: A * R * Q };
+}
+
+// OEE de cada día del reporte: con una semana de datos sale la tendencia sin guardar nada aparte.
+// Los paros cuentan en el día que trae su fecha (un paro nocturno después de medianoche cae en el día siguiente).
+export type DayOee = { fecha: string; oee: number; A: number; R: number; Q: number; lines: { linea: string; oee: number }[] };
+export function byDay(r: Result): DayOee[] {
+ const days = [...new Set(r.lots.map(l => l.fecha))].filter(Boolean).sort();
+ return days.map(fecha => {
+  const lots = r.lots.filter(l => l.fecha === fecha), stops = r.stops.filter(s => s.fecha === fecha);
+  const lines = [...new Set(lots.map(l => l.linea))].sort().map(linea => lineOee(linea, lots, stops));
+  return { fecha, ...totalOf(lines), lines: lines.map(l => ({ linea: l.linea, oee: l.oee })) };
+ });
+}
+
 export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLimit = 0.03, over: Partial<Record<FileKind, ColumnMap>> = {}): Result {
  const P = mapColumns('prod', prod.headers, over.prod).map, Qm = mapColumns('qual', qual.headers, over.qual).map, S = stops ? mapColumns('stops', stops.headers, over.stops).map : null;
  const get = (r: string[], m: ColumnMap, f: Field) => (m[f] === undefined ? '' : r[m[f]!] ?? '');
@@ -87,17 +115,8 @@ export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLi
  stopList.forEach(s => { if (!s.causa && s.min >= 30) ex.push({ rule: 'paro', severity: 'media', text: [`Paro de ${s.min} min sin causa registrada`, `${s.min}-min stop with no cause`], where: `${s.linea} · ${s.fecha} · ${s.turno}` }); });
 
  const names = [...new Set(lots.map(l => l.linea))].sort();
- const lines: LineOee[] = names.map(linea => {
-  const ls = lots.filter(l => l.linea === linea && !Number.isNaN(l.prod) && !Number.isNaN(l.prog));
-  const prog = ls.reduce((s, l) => s + l.prog, 0), stopsMin = stopList.filter(s => s.linea === linea).reduce((s, x) => s + x.min, 0);
-  const run = Math.max(0, prog - stopsMin), ideal = ls.reduce((s, l) => s + (l.ciclo || 0) * l.prod / 60, 0);
-  const prodSum = ls.reduce((s, l) => s + l.prod, 0), rej = ls.reduce((s, l) => s + (l.rej ?? 0), 0);
-  const A = prog ? run / prog : 0, R = run ? Math.min(1, ideal / run) : 0, Q = prodSum ? (prodSum - rej) / prodSum : 0;
-  const avgCycle = prodSum ? ideal / prodSum : 0;
-  return { linea, prog, stops: stopsMin, run, ideal, prod: prodSum, rej, A, R, Q, oee: A * R * Q, lossStops: stopsMin, lossSpeed: Math.max(0, run - ideal), lossQuality: rej * avgCycle };
- });
- const T = lines.reduce((t, l) => ({ prog: t.prog + l.prog, run: t.run + l.run, ideal: t.ideal + l.ideal, prod: t.prod + l.prod, rej: t.rej + l.rej }), { prog: 0, run: 0, ideal: 0, prod: 0, rej: 0 });
- const A = T.prog ? T.run / T.prog : 0, R = T.run ? Math.min(1, T.ideal / T.run) : 0, Q = T.prod ? (T.prod - T.rej) / T.prod : 0;
+ const lines: LineOee[] = names.map(linea => lineOee(linea, lots, stopList));
+ const { A, R, Q } = totalOf(lines);
  const causes = new Map<string, number>(); stopList.forEach(s => causes.set(s.causa || 'Sin causa', (causes.get(s.causa || 'Sin causa') ?? 0) + s.min));
  const shifts: ShiftSum[] = [...new Set(lots.map(l => l.turno))].map(turno => {
   const ls = lots.filter(l => l.turno === turno), sum = (f: (l: Lot) => number) => ls.reduce((a, l) => a + (Number.isNaN(f(l)) ? 0 : f(l)), 0);

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Cruza los reportes de producción, calidad y paros del turno, marca lo que no cuadra y calcula el OEE por línea. Sale en Excel. React + TypeScript + SheetJS.",
+  "description": "Cruza los reportes de producción, calidad y paros del turno, marca las incoherencias y calcula el OEE por línea. Sale en Excel. React + TypeScript + SheetJS.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
