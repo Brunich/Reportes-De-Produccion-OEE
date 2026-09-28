@@ -1,0 +1,1 @@
+{"desc": "Cruza los reportes de producción, calidad y paros del turno, marca lo que no cuadra y calcula el OEE por línea. Sale en Excel. React + TypeScript + SheetJS.", "topics": ["oee", "manufacturing", "excel", "sheetjs", "react", "typescript"]}

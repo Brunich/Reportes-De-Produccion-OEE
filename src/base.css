@@ -1,0 +1,70 @@
+/* Identidad del portafolio de Bruno: morado apagado, sin colores chillantes. */
+:root{--bg:#120e1d;--surface:#1b1629;--surface-2:#231c35;--line:#302743;--text:#f4f0f7;--muted:#b7aec4;
+ --lilac:#a894f0;--cyan:#b3aed8;--rose:#dd9fbd;--gold:#d9c08a;--mint:#9fd0bf;--violet:#b9a7ff;--amber:var(--gold);--coral:#ff6b8b;
+ --accent:var(--lilac);--on-accent:#120c30;
+ --display:'Bricolage Grotesque Variable',system-ui,sans-serif;--serif:'Instrument Serif',Georgia,serif;
+ --mono:'JetBrains Mono Variable',ui-monospace,Consolas,monospace;
+ font-family:'DM Sans Variable',system-ui,sans-serif;color-scheme:dark;background:var(--bg);color:var(--text)}
+*{box-sizing:border-box}
+html,body{overflow-x:clip}
+body{margin:0;min-width:320px;background:radial-gradient(120% 70% at 50% -8%,#2b1f47 0%,transparent 55%),radial-gradient(90% 60% at 100% 55%,#241733 0%,transparent 60%),radial-gradient(90% 60% at 0% 85%,#2a1646 0%,transparent 60%),var(--bg);background-attachment:fixed}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(#ffffff0d 1px,transparent 1px);background-size:26px 26px;mask-image:linear-gradient(#000,transparent 70%)}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:default}
+a{color:inherit}
+h1,h2,h3,h4,p{margin:0}
+img{display:block;max-width:100%}
+svg{vertical-align:middle;flex-shrink:0}
+:focus-visible{outline:2px solid var(--lilac);outline-offset:4px}
+::selection{background:var(--lilac);color:#120c30}
+
+.top,main,.foot{width:min(1180px,calc(100% - 32px));margin-inline:auto}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-block:22px}
+.brand{display:flex;align-items:baseline;gap:8px;text-decoration:none}
+.brand b{font:700 20px var(--display);letter-spacing:-.02em}
+.brand em{font:italic 19px var(--serif);color:var(--lilac)}
+.top nav{display:flex;align-items:center;gap:14px}
+.top nav>a{font-size:14px;color:var(--muted);text-decoration:none;min-height:44px;display:inline-flex;align-items:center}
+.top nav>a:hover{color:var(--text)}
+.lang{display:flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:12px}
+.lang button{min-width:44px;min-height:38px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:12px;font-weight:600}
+.lang button[aria-pressed=true]{background:var(--surface-2);color:var(--text)}
+
+.hero{padding-block:clamp(28px,6vw,64px) 32px;max-width:860px}
+.kicker{font:600 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lilac)}
+.hero h1{font:600 clamp(40px,6vw,72px)/1.02 var(--display);letter-spacing:-.04em;margin-top:14px;text-wrap:balance}
+.pitch{font:italic clamp(22px,2.6vw,30px)/1.3 var(--serif);color:var(--rose);margin-top:14px}
+.desc{font-size:17px;line-height:1.7;color:var(--muted);margin-top:18px;max-width:680px}
+.metrics{display:flex;flex-wrap:wrap;gap:12px;list-style:none;padding:0;margin:26px 0 0}
+.metrics li{display:flex;align-items:baseline;gap:10px;padding:12px 16px;border:1px solid var(--line);border-radius:14px;background:#1b162999}
+.metrics b{font:700 26px var(--display);color:var(--lilac)}
+.metrics span{font-size:13px;color:var(--muted)}
+.hero>*{animation:rise .9s cubic-bezier(.16,1,.3,1) both}
+.hero>*:nth-child(2){animation-delay:.06s}.hero>*:nth-child(3){animation-delay:.12s}.hero>*:nth-child(4){animation-delay:.18s}.hero>*:nth-child(5){animation-delay:.24s}
+@keyframes rise{from{transform:translateY(24px)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.demo{padding-block:12px 40px}
+.how{padding-block:40px 20px;border-top:1px solid var(--line)}
+.how h2,.steps+*{scroll-margin-top:20px}
+.how h2{font:600 clamp(28px,3.4vw,40px) var(--display);letter-spacing:-.03em}
+.how ol,.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;list-style:none;padding:0;margin:24px 0 0}
+.how li,.steps li{padding:20px;border:1px solid var(--line);border-radius:18px;background:#1b1629cc}
+.how li span,.steps li span{font:600 12px var(--mono);color:var(--lilac)}
+.how li strong,.steps li strong{display:block;font:600 20px var(--display);margin-top:8px}
+.how li p,.steps li p{font-size:14px;line-height:1.65;color:var(--muted);margin-top:8px}
+.steps{margin:0 0 26px}
+.tabs{display:flex;gap:4px;margin:0 0 20px;padding:4px;border-radius:14px;background:#0f0b18;border:1px solid var(--line);width:max-content;max-width:100%;overflow-x:auto}
+.tabs button{min-height:42px;border:0;background:transparent;border-radius:10px;padding:8px 16px;color:var(--muted);white-space:nowrap}
+.tabs button[aria-selected=true]{background:linear-gradient(120deg,#a894f0,#c9a8e8);color:#150f22}
+.foot{display:flex;flex-wrap:wrap;gap:10px 22px;padding-block:28px 40px;margin-top:30px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.foot a{color:var(--text)}
+
+/* El analizador toma la paleta morada (con :root para ganarle al CSS del componente, que carga después) */
+:root .dw-workbench{--dw-bg:#1b1629;--dw-surface:#231c35;--dw-line:#30274a;border-color:#ffffff17;border-radius:24px}
+:root .dw-workbench button{border-color:#ffffff2e;background:#231c35}
+:root .dw-workbench td{border-bottom-color:#2a2240}:root .dw-workbench th{background:#261f3b}
+:root .dw-search input{background:#0f0b18;border-color:#30274a}
+:root .dw-col,:root .dw-yours{background:#1e182e}
+:root .dw-primary{background:var(--mint)!important;border-color:var(--mint)!important;color:#0d1a16!important}
