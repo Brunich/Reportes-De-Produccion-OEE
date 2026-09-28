@@ -1,44 +1,71 @@
 import { toNumber } from './quality.ts';
-export type CsvData = { headers: string[]; rows: string[][] };
+export type CsvFixes = { blank: number; short: number; long: number };
+export type CsvData = { headers: string[]; rows: string[][]; fixes?: CsvFixes };
 
+// Excel en español guarda los CSV en Windows-1252 y el «Texto Unicode» en UTF-16: se detecta solo.
+export function decodeBytes(buf: ArrayBuffer): string {
+ const b = new Uint8Array(buf);
+ if (b[0] === 0xff && b[1] === 0xfe) return new TextDecoder('utf-16le').decode(b);
+ if (b[0] === 0xfe && b[1] === 0xff) return new TextDecoder('utf-16be').decode(b);
+ try { return new TextDecoder('utf-8', { fatal: true }).decode(b); } catch { return new TextDecoder('windows-1252').decode(b); }
+}
+
+// Lector tolerante, como Excel: salta líneas vacías, rellena filas cortas y convierte los datos de más en columnas.
+// Nunca descarta contenido; lo que ajusta lo cuenta en `fixes`.
 export function parseCsv(source: string): CsvData {
- const text = source.replace(/^\uFEFF/, '');
+ const text = source.replace(/^﻿/, '');
  if (!text.trim()) throw new Error('EMPTY');
- let quoted = false, commas = 0, semicolons = 0;
- for (let i=0;i<text.length;i++) {
-  const c=text[i];
-  if(c==='"') { if(quoted && text[i+1]==='"') i++; else quoted=!quoted; }
-  if(!quoted) { if(c==='\n'||c==='\r') break; if(c===',') commas++; if(c===';') semicolons++; }
+ const counts: Record<string, number> = { ',': 0, ';': 0, '\t': 0, '|': 0 };
+ let quoted = false;
+ for (let i = 0; i < text.length; i++) {
+  const c = text[i];
+  if (c === '"') { if (quoted && text[i + 1] === '"') i++; else quoted = !quoted; }
+  if (!quoted) { if (c === '\n' || c === '\r') break; if (c in counts) counts[c]++; }
  }
- const delimiter=semicolons>commas?';':',';
- const records:string[][]=[];
- let row:string[]=[], value='', inQuotes=false, closed=false;
- const cell=()=>{row.push(value);value='';closed=false;};
- const record=()=>{cell();records.push(row);row=[];};
- for(let i=0;i<text.length;i++) {
-  const c=text[i];
-  if(inQuotes) {
-   if(c==='"') {if(text[i+1]==='"'){value+='"';i++;}else{inQuotes=false;closed=true;}}
-   else value+=c;
-  } else if(c===delimiter) cell();
-  else if(c==='\r'||c==='\n') {record();if(c==='\r'&&text[i+1]==='\n')i++;}
-  else if(c==='"' && value==='' && !closed) inQuotes=true;
-  else if(c==='"'||closed) throw new Error(`INVALID_QUOTE:${records.length+1}`);
-  else value+=c;
+ const [best, seen] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+ const delimiter = seen > 0 ? best : ',';
+ const records: string[][] = [];
+ let row: string[] = [], value = '', inQuotes = false, closed = false;
+ const cell = () => { row.push(value); value = ''; closed = false; };
+ const record = () => { cell(); records.push(row); row = []; };
+ for (let i = 0; i < text.length; i++) {
+  const c = text[i];
+  if (inQuotes) {
+   if (c === '"') { if (text[i + 1] === '"') { value += '"'; i++; } else { inQuotes = false; closed = true; } }
+   else value += c;
+  } else if (c === delimiter) cell();
+  else if (c === '\r' || c === '\n') { record(); if (c === '\r' && text[i + 1] === '\n') i++; }
+  else if (c === '"' && value === '' && !closed) inQuotes = true;
+  else if (closed) throw new Error(`INVALID_QUOTE:${records.length + 1}`);
+  else value += c; // una comilla suelta en medio (5" tornillo) se queda como texto
  }
- if(inQuotes) throw new Error(`UNCLOSED_QUOTE:${records.length+1}`);
- if(value!==''||row.length||closed)record();
- const rawHeaders=records.shift()!;
- const used=new Set<string>();
- const reserved=new Set(rawHeaders.map(h=>h.trim()).filter(Boolean));
- const headers=rawHeaders.map((h,index)=>{
-  const base=h.trim()||`Column ${index+1}`;
-  let name=base, suffix=2;
-  while(used.has(name)||(name!==base&&reserved.has(name)))name=`${base} (${suffix++})`;
-  used.add(name);return name;
+ if (inQuotes) throw new Error(`UNCLOSED_QUOTE:${records.length + 1}`);
+ if (value !== '' || row.length || closed) record();
+ const fixes: CsvFixes = { blank: 0, short: 0, long: 0 };
+ const isEmpty = (r: string[]) => r.every(v => v === '');
+ while (records.length && isEmpty(records[0])) { records.shift(); fixes.blank++; }
+ while (records.length > 1 && isEmpty(records[records.length - 1])) { records.pop(); fixes.blank++; }
+ if (!records.length) throw new Error('EMPTY');
+ const rawHeaders = records.shift()!;
+ // Una línea vacía sólo es «de sobra» si tiene menos celdas que el encabezado; en un archivo
+ // de una columna es una celda vacía de verdad y se conserva.
+ const kept = records.filter(r => { const skip = isEmpty(r) && r.length < rawHeaders.length; if (skip) fixes.blank++; return !skip; });
+ let width = rawHeaders.length;
+ kept.forEach(r => {
+  while (r.length > width && r[r.length - 1] === '') r.pop(); // «1,2,» con coma de más
+  if (r.length > width) { fixes.long++; width = r.length; }
  });
- records.forEach((r,i)=>{if(r.length!==headers.length)throw new Error(`ROW_WIDTH:${i+2}:${headers.length}:${r.length}`);});
- return {headers,rows:records};
+ kept.forEach(r => { if (r.length < width) { if (r.length < rawHeaders.length) fixes.short++; while (r.length < width) r.push(''); } });
+ while (rawHeaders.length < width) rawHeaders.push('');
+ const used = new Set<string>();
+ const reserved = new Set(rawHeaders.map(h => h.trim()).filter(Boolean));
+ const headers = rawHeaders.map((h, index) => {
+  const base = h.trim() || `Column ${index + 1}`;
+  let name = base, suffix = 2;
+  while (used.has(name) || (name !== base && reserved.has(name))) name = `${base} (${suffix++})`;
+  used.add(name); return name;
+ });
+ return { headers, rows: kept, fixes };
 }
 
 export function cleanRows(rows:string[][],trim:boolean,dedupe:boolean):string[][] {

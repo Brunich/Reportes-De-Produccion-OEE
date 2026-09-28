@@ -67,4 +67,5 @@ svg{vertical-align:middle;flex-shrink:0}
 :root .dw-workbench td{border-bottom-color:#2a2240}:root .dw-workbench th{background:#261f3b}
 :root .dw-search input{background:#0f0b18;border-color:#30274a}
 :root .dw-col,:root .dw-yours{background:#1e182e}
+.dw-note{margin:12px 0 0;padding:10px 14px;border-radius:12px;background:#9fd0bf14;border:1px solid #9fd0bf40;color:#cfe9df;font-size:14px}
 :root .dw-primary{background:var(--mint)!important;border-color:var(--mint)!important;color:#0d1a16!important}

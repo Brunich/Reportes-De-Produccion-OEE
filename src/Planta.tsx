@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { FileXls, FileCsv, CheckCircle, WarningCircle, DownloadSimple, WhatsappLogo, Copy } from '@phosphor-icons/react';
 import { parseCsv } from './csv';
+import { readTable, TABLE_ACCEPT } from './read-file';
 import { consolidate, mapColumns, summaryText, NEEDS, SAMPLE_PROD, SAMPLE_QUAL, SAMPLE_STOPS } from './planta-logic';
 import type { FileKind, Grid, LineOee } from './planta-logic';
 import './planta.css';
@@ -12,17 +13,7 @@ const SAMPLES: Record<FileKind, [string, string]> = { prod: ['produccion_marzo.c
 const FIELD_ES: Record<string, string> = { fecha: 'fecha', turno: 'turno', linea: 'línea', lote: 'lote', plan: 'plan', prod: 'producidas', prog: 'min programados', ciclo: 'ciclo ideal', rev: 'revisadas', rej: 'rechazadas', min: 'minutos', causa: 'causa' };
 const pct = (n: number) => `${(n * 100).toFixed(1)} %`;
 
-async function readFile(file: File): Promise<Grid> {
- if (/\.(xlsx|xls)$/i.test(file.name)) {
-  const XLSX = await import('xlsx');
-  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-  const rows = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' }).map(r => r.map(v => String(v)));
-  const [headers, ...rest] = rows;
-  if (!headers?.length) throw new Error('EMPTY');
-  return { headers, rows: rest.filter(r => r.some(v => v.trim())) };
- }
- return parseCsv(new TextDecoder('utf-8').decode(await file.arrayBuffer()));
-}
+const readFile = (file: File): Promise<Grid> => readTable(file);
 
 function Ring({ value, size = 120, label }: { value: number; size?: number; label?: string }) {
  const tone = value >= .85 ? 'good' : value >= .65 ? 'mid' : 'low';
@@ -97,7 +88,7 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
      <div className="pl-file-name">{s && /\.xlsx?$/i.test(s.name) ? <FileXls size={26} weight="duotone"/> : <FileCsv size={26} weight="duotone"/>}<div><strong>{s?.name ?? t('Sin archivo', 'No file')}</strong><small>{s ? `${s.grid.rows.length} ${t('filas', 'rows')}${s.sample ? t(' · ejemplo', ' · sample') : ''}` : ''}</small></div></div>
      <ul className="pl-cols">{NEEDS[k].map(f => <li key={f} className={m && !m.missing.includes(f as never) ? 'on' : ''}>{es ? FIELD_ES[f] : f}</li>)}</ul>
      {m && m.missing.length > 0 && <p className="pl-miss"><WarningCircle size={15}/>{t('Falta: ', 'Missing: ')}{m.missing.map(f => es ? FIELD_ES[f] : f).join(', ')}</p>}
-     <input ref={el => { inputs.current[k] = el; }} type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => { void load(k, e.target.files?.[0]); e.target.value = ''; }}/>
+     <input ref={el => { inputs.current[k] = el; }} type="file" accept={TABLE_ACCEPT} hidden onChange={e => { void load(k, e.target.files?.[0]); e.target.value = ''; }}/>
      <div className="pl-file-actions"><button className="dw-primary" onClick={() => inputs.current[k]?.click()}>{t('Subir Excel o CSV', 'Upload Excel or CSV')}</button><button className="pl-link" onClick={() => void sampleXlsx(k)}>{t('ejemplo .xlsx', 'sample .xlsx')}</button></div>
     </div>;
    })}
