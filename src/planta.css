@@ -162,3 +162,7 @@ html[data-motion=paused] .pl-day-bar i{animation:none}
 .pl-daytable th[scope=row],.pl-daytable thead th:first-child{text-align:left}
 .pl-daytable td.up{color:#9fd0bf;font-weight:700}.pl-daytable td.down{color:#e58fa0;font-weight:700}
 @media(max-width:760px){.pl-days{grid-template-columns:1fr;row-gap:16px}.pl-days-chart{height:180px}}
+.pl-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 8px;border-radius:99px;font-family:inherit;font-size:13px;line-height:1.3;font-weight:600;letter-spacing:0;font-style:normal;align-self:center}
+.pl-chip.warn{color:#ead39b;background:#e3c7801a;border:1px solid #e3c78040}
+.pl-chip.ok{color:#a9dcc0;background:#94d1ae1a;border:1px solid #94d1ae40}
+.pl-ex li>span{display:inline-flex;align-items:center;gap:4px}
