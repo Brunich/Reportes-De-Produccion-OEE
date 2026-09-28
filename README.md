@@ -47,11 +47,6 @@ npm run build   # tipos + build de producción
 
 Hecho con React 19, TypeScript y Vite. Necesita Node 22 o más nuevo (las pruebas corren TypeScript directo con Node).
 
-## Lo que sigue
-
-- Metas por línea configurables en vez de fijas.
-- Guardar turnos anteriores para comparar semanas.
-
 ---
 
 Parte del [portafolio de Bruno Salas](https://bruno-portfolio-azure.vercel.app) · [GitHub](https://github.com/Brunich)
