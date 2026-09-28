@@ -21,7 +21,7 @@ Subes el Excel de producción, el de calidad y el de paros del turno. Se cruzan 
 | Archivo | Qué hace |
 | --- | --- |
 | `src/planta-logic.ts` | Reconoce las columnas por nombre, cruza los tres archivos por fecha, turno, línea y lote, aplica las reglas de excepción y calcula el OEE. |
-| `src/Planta.tsx` | Las tres ranuras de archivo, los anillos de OEE por línea, el Pareto de paros y la descarga del reporte. |
+| `src/Planta.tsx` | Las tres ranuras de archivo (con columnas asignables a mano), los anillos de OEE por línea, el Pareto de paros, la comparación por turno, las excepciones revisadas y la descarga del reporte. |
 | `src/csv.ts` | Lector de CSV compartido con el analizador. |
 
 La lógica está separada de la interfaz, así se prueba sin navegador (`tests/`).

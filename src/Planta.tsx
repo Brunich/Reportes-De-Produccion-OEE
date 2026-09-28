@@ -3,7 +3,8 @@ import { FileXls, FileCsv, CheckCircle, WarningCircle, DownloadSimple, WhatsappL
 import { parseCsv } from './csv';
 import { readTable, TABLE_ACCEPT } from './read-file';
 import { consolidate, mapColumns, summaryText, NEEDS, SAMPLE_PROD, SAMPLE_QUAL, SAMPLE_STOPS } from './planta-logic';
-import type { FileKind, Grid, LineOee } from './planta-logic';
+import type { ColumnMap, Field, FileKind, Grid, LineOee } from './planta-logic';
+import { exportCsv } from './csv';
 import './planta.css';
 
 // Planta: tres reportes de un turno (producción, calidad y paros) se cruzan solos,
@@ -49,18 +50,30 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
  const [filter, setFilter] = useState('');
  const [note, setNote] = useState('');
  const [run, setRun] = useState(0);
+ const [over, setOver] = useState<Record<FileKind, ColumnMap>>({ prod: {}, qual: {}, stops: {} });
+ const [seen, setSeen] = useState<Set<string>>(() => new Set());
  const inputs = useRef<Record<FileKind, HTMLInputElement | null>>({ prod: null, qual: null, stops: null });
- const maps = useMemo(() => (['prod', 'qual', 'stops'] as FileKind[]).map(k => slots[k] ? mapColumns(k, slots[k]!.grid.headers) : null), [slots]);
+ const maps = useMemo(() => (['prod', 'qual', 'stops'] as FileKind[]).map(k => slots[k] ? mapColumns(k, slots[k]!.grid.headers, over[k]) : null), [slots, over]);
  const ready = slots.prod && slots.qual && !maps[0]?.missing.length && !maps[1]?.missing.length;
- const res = useMemo(() => ready ? consolidate(slots.prod!.grid, slots.qual!.grid, slots.stops && !maps[2]?.missing.length ? slots.stops.grid : null, limit / 100) : null, [slots, limit, ready, maps]);
+ const res = useMemo(() => ready ? consolidate(slots.prod!.grid, slots.qual!.grid, slots.stops && !maps[2]?.missing.length ? slots.stops.grid : null, limit / 100, over) : null, [slots, limit, ready, maps, over]);
  const matched = res ? res.lots.filter(l => l.rev !== undefined).length : 0;
  const rules = res ? [...new Set(res.exceptions.map(e => e.rule))] : [];
  const shown = res ? res.exceptions.filter(e => !filter || e.rule === filter) : [];
+ // Revisada: el supervisor la palomea al atenderla; la marca vive mientras la página esté abierta.
+ const idOf = (e: { rule: string; where: string; text: [string, string] }) => `${e.rule}|${e.where}|${e.text[0]}`;
+ const reviewed = res ? res.exceptions.filter(e => seen.has(idOf(e))).length : 0;
+ const toggle = (id: string) => setSeen(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+ function exportExceptions() {
+  if (!res) return;
+  const csv = exportCsv([t('severidad', 'severity'), t('excepción', 'exception'), t('dónde', 'where'), t('revisada', 'reviewed')], res.exceptions.map(e => [e.severity, e.text[L], e.where, seen.has(idOf(e)) ? t('sí', 'yes') : t('no', 'no')]));
+  const url = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = 'excepciones_planta.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+ }
  const stopMax = res?.pareto[0]?.[1] ?? 1, stopTotal = res ? res.pareto.reduce((s, p) => s + p[1], 0) : 0;
 
  async function load(kind: FileKind, file: File | undefined) {
   if (!file) return;
-  try { const grid = await readFile(file); setSlots(s => ({ ...s, [kind]: { name: file.name, grid, sample: false } })); setErr(''); setRun(r => r + 1); }
+  try { const grid = await readFile(file); setSlots(s => ({ ...s, [kind]: { name: file.name, grid, sample: false } })); setOver(o => ({ ...o, [kind]: {} })); setErr(''); setRun(r => r + 1); }
   catch { setErr(t(`No pude leer ${file.name}. Usa Excel (.xlsx) o CSV en UTF-8.`, `Could not read ${file.name}. Use Excel (.xlsx) or UTF-8 CSV.`)); }
  }
  async function sampleXlsx(kind: FileKind) {
@@ -87,7 +100,9 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
      <span className="pl-file-kind">{[t('1 · Producción', '1 · Production'), t('2 · Calidad', '2 · Quality'), t('3 · Paros (opcional)', '3 · Stops (optional)')][i]}</span>
      <div className="pl-file-name">{s && /\.xlsx?$/i.test(s.name) ? <FileXls size={26} weight="duotone"/> : <FileCsv size={26} weight="duotone"/>}<div><strong>{s?.name ?? t('Sin archivo', 'No file')}</strong><small>{s ? `${s.grid.rows.length} ${t('filas', 'rows')}${s.sample ? t(' · ejemplo', ' · sample') : ''}` : ''}</small></div></div>
      <ul className="pl-cols">{NEEDS[k].map(f => <li key={f} className={m && !m.missing.includes(f as never) ? 'on' : ''}>{es ? FIELD_ES[f] : f}</li>)}</ul>
-     {m && m.missing.length > 0 && <p className="pl-miss"><WarningCircle size={15}/>{t('Falta: ', 'Missing: ')}{m.missing.map(f => es ? FIELD_ES[f] : f).join(', ')}</p>}
+     {m && m.missing.length > 0 && s && <div className="pl-miss"><p><WarningCircle size={15}/>{t('No reconocí estas columnas. Dime cuál es cuál:', 'I did not recognize these columns. Tell me which is which:')}</p>
+      {m.missing.map(f => <label key={f}><span>{es ? FIELD_ES[f] : f}</span><select value="" onChange={e => { const v = Number(e.target.value); setOver(o => ({ ...o, [k]: { ...o[k], [f as Field]: v } })); }}><option value="">{t('Elegir columna…', 'Choose column…')}</option>{s.grid.headers.map((h, j) => <option key={j} value={j} disabled={Object.values(m.map).includes(j)}>{h || `${t('columna', 'column')} ${j + 1}`}</option>)}</select></label>)}</div>}
+     {Object.keys(over[k]).length > 0 && !m?.missing.length && <p className="pl-mapped"><CheckCircle size={15}/>{t('Columnas asignadas a mano.', 'Columns assigned by hand.')} <button className="pl-link" onClick={() => setOver(o => ({ ...o, [k]: {} }))}>{t('Deshacer', 'Undo')}</button></p>}
      <input ref={el => { inputs.current[k] = el; }} type="file" accept={TABLE_ACCEPT} hidden onChange={e => { void load(k, e.target.files?.[0]); e.target.value = ''; }}/>
      <div className="pl-file-actions"><button className="dw-primary" onClick={() => inputs.current[k]?.click()}>{t('Subir Excel o CSV', 'Upload Excel or CSV')}</button><button className="pl-link" onClick={() => void sampleXlsx(k)}>{t('ejemplo .xlsx', 'sample .xlsx')}</button></div>
     </div>;
@@ -107,25 +122,33 @@ export default function Planta({ lang }: { lang: 'es' | 'en' }) {
     </dl>
    </section>
 
-   <h4 className="pl-h">{t('OEE por línea', 'OEE by line')}<span>{t('Disponibilidad × rendimiento × calidad. La marca del anillo es el 85 %.', 'Availability × performance × quality. The ring mark is 85%.')}</span></h4>
+   <h3 className="pl-h">{t('OEE por línea', 'OEE by line')}<span>{t('Disponibilidad × rendimiento × calidad. La marca del anillo es el 85 %.', 'Availability × performance × quality. The ring mark is 85%.')}</span></h3>
    <div className="pl-lines">{res.lines.map((l, i) => <LineCard key={l.linea} l={l} es={es} i={i}/>)}</div>
 
    <div className="pl-split">
     <section className="pl-ex">
-     <h4 className="pl-h">{t('Lo que no cuadra', 'What does not add up')}<span>{t('Revísalo antes de firmar el turno.', 'Check it before signing off the shift.')}</span></h4>
+     <h3 className="pl-h">{t('Lo que no cuadra', 'What does not add up')}<span>{t('Revísalo antes de firmar el turno.', 'Check it before signing off the shift.')}</span></h3>
      <label className="pl-limit">{t('Rechazo máximo', 'Max rejection')} <input type="range" min={1} max={8} step={0.5} value={limit} onChange={e => setLimit(+e.target.value)}/><b>{limit} %</b></label>
      <div className="pl-filter">{['', ...rules].map(r => <button key={r || 'all'} aria-pressed={filter === r} onClick={() => setFilter(r)}>{r ? ({ 'sin-inspeccion': t('Sin inspección', 'Not inspected'), 'sin-produccion': t('Lote no existe', 'Unknown batch'), revisadas: t('Revisadas > producidas', 'Inspected > produced'), rechazo: t('Rechazo alto', 'High rejection'), plan: t('Plan', 'Plan'), paro: t('Paro sin causa', 'Stop without cause'), dato: t('Dato raro', 'Odd value') } as Record<string, string>)[r] : t(`Todas (${res.exceptions.length})`, `All (${res.exceptions.length})`)}</button>)}</div>
-     <ol>{shown.map((e, i) => <li key={i} className={`sev-${e.severity}`} style={{ ['--i' as string]: i }}><span>{e.severity === 'alta' ? t('Alta', 'High') : t('Media', 'Medium')}</span><div><strong>{e.text[L]}</strong><small>{e.where}</small></div></li>)}</ol>
+     <p className="pl-progress"><span><i style={{ width: `${res.exceptions.length ? reviewed / res.exceptions.length * 100 : 100}%` }}/></span>{t(`${reviewed} de ${res.exceptions.length} revisadas`, `${reviewed} of ${res.exceptions.length} reviewed`)}<button className="pl-link" onClick={exportExceptions}>{t('Exportar CSV', 'Export CSV')}</button></p>
+     <ol>{shown.map((e, i) => { const id = idOf(e), done = seen.has(id); return <li key={id} className={`sev-${e.severity}${done ? ' is-done' : ''}`} style={{ ['--i' as string]: i }}><span>{e.severity === 'alta' ? t('Alta', 'High') : t('Media', 'Medium')}</span><div><strong>{e.text[L]}</strong><small>{e.where}</small></div><label className="pl-check"><input type="checkbox" checked={done} onChange={() => toggle(id)}/><span>{t('Revisada', 'Reviewed')}</span></label></li>; })}</ol>
      {!shown.length && <p className="pl-ok"><CheckCircle size={18}/>{t('Todo cuadra.', 'Everything adds up.')}</p>}
     </section>
     <section className="pl-pareto">
-     <h4 className="pl-h">{t('Paros por causa', 'Stops by cause')}<span>{t('Pareto: arriba lo que más tiempo se come.', 'Pareto: the biggest time-eaters first.')}</span></h4>
+     <h3 className="pl-h">{t('Paros por causa', 'Stops by cause')}<span>{t('Pareto: arriba lo que más tiempo se come.', 'Pareto: the biggest time-eaters first.')}</span></h3>
      {res.pareto.length ? <ol>{res.pareto.map(([c, m], i) => <li key={c} style={{ ['--i' as string]: i }}><span>{c}</span><i><b style={{ width: `${m / stopMax * 100}%` }}/></i><em>{m} min</em><small>{Math.round(res.pareto.slice(0, i + 1).reduce((s, x) => s + x[1], 0) / stopTotal * 100)} %</small></li>)}</ol> : <p className="pl-ok">{t('Sin reporte de paros.', 'No stops report.')}</p>}
+     <h3 className="pl-h pl-h-shift">{t('Por turno', 'By shift')}<span>{t('Mismo plan, distinto resultado: dónde mirar primero.', 'Same plan, different result: where to look first.')}</span></h3>
+     <table className="pl-shifts"><thead><tr><th scope="col">{t('Turno', 'Shift')}</th><th scope="col">{t('Plan', 'Plan')}</th><th scope="col">{t('Rechazo', 'Reject')}</th><th scope="col">{t('Paros', 'Stops')}</th></tr></thead>
+      <tbody>{res.shifts.map(sh => { const plan = sh.plan ? sh.prod / sh.plan : 0, rej = sh.rev ? sh.rej / sh.rev : 0;
+       const worst = (k: 'plan' | 'rej' | 'stops') => res.shifts.length > 1 && res.shifts.every(o => k === 'plan' ? (o.plan ? o.prod / o.plan : 0) >= plan : k === 'rej' ? (o.rev ? o.rej / o.rev : 0) <= rej : o.stops <= sh.stops);
+       return <tr key={sh.turno}><th scope="row">{es ? sh.turno : ({ Matutino: 'Morning', Vespertino: 'Evening', Nocturno: 'Night' } as Record<string, string>)[sh.turno] ?? sh.turno}<small>{sh.lots} {t('lotes', 'batches')}</small></th>
+        <td className={worst('plan') ? 'worst' : ''}><i style={{ width: `${Math.min(100, plan * 100)}%` }}/>{pct(plan)}</td><td className={worst('rej') ? 'worst' : ''}>{pct(rej)}</td><td className={worst('stops') ? 'worst' : ''}>{sh.stops} min</td></tr>; })}</tbody></table>
+     <p className="pl-shift-note">{t('En rosa, el peor turno de cada columna.', 'In pink, the worst shift in each column.')}</p>
     </section>
    </div>
 
    <section className="pl-report">
-    <div><h4 className="pl-h">{t('Reporte del turno', 'Shift report')}</h4><p>{t('Cuatro hojas de Excel: OEE, excepciones, consolidado y paros. O el resumen corto para el grupo de WhatsApp.', 'Four Excel sheets: OEE, exceptions, consolidated and stops. Or the short summary for the WhatsApp group.')}</p></div>
+    <div><h3 className="pl-h">{t('Reporte del turno', 'Shift report')}</h3><p>{t('Cuatro hojas de Excel: OEE, excepciones, consolidado y paros. O el resumen corto para el grupo de WhatsApp.', 'Four Excel sheets: OEE, exceptions, consolidated and stops. Or the short summary for the WhatsApp group.')}</p></div>
     <div className="pl-report-actions">
      <button className="dw-primary" onClick={() => void report()}><DownloadSimple size={17}/>{t('Descargar Excel', 'Download Excel')}</button>
      <button onClick={async () => { try { await navigator.clipboard.writeText(summaryText(res, es)); setNote(t('Resumen copiado.', 'Summary copied.')); } catch { setNote(''); } }}><Copy size={17}/>{t('Copiar resumen', 'Copy summary')}</button>

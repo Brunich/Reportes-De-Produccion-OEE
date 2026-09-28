@@ -2,7 +2,9 @@
 // marca lo que no cuadra y calcula el OEE de cada línea (disponibilidad × rendimiento × calidad).
 export type Grid = { headers: string[]; rows: string[][] };
 export type FileKind = 'prod' | 'qual' | 'stops';
-type Field = 'fecha' | 'turno' | 'linea' | 'lote' | 'plan' | 'prod' | 'prog' | 'ciclo' | 'rev' | 'rej' | 'defecto' | 'min' | 'causa';
+import { parseDate } from './dates.ts';
+
+export type Field = 'fecha' | 'turno' | 'linea' | 'lote' | 'plan' | 'prod' | 'prog' | 'ciclo' | 'rev' | 'rej' | 'defecto' | 'min' | 'causa';
 
 const fold = (s: string) => s.toLocaleLowerCase('es').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const SYN: Record<Field, string[]> = {
@@ -20,9 +22,13 @@ export const NEEDS: Record<FileKind, Field[]> = {
 const OPTIONAL: Partial<Record<FileKind, Field[]>> = { qual: ['defecto'] };
 
 // Qué columna del archivo corresponde a cada dato (por nombre, sin importar acentos ni mayúsculas).
-export function mapColumns(kind: FileKind, headers: string[]) {
- const h = headers.map(fold), map: Partial<Record<Field, number>> = {}, used = new Set<number>();
+// Lo que el supervisor eligió a mano (`over`) manda sobre lo que se adivina por el nombre.
+export type ColumnMap = Partial<Record<Field, number>>;
+export function mapColumns(kind: FileKind, headers: string[], over: ColumnMap = {}) {
+ const h = headers.map(fold), map: ColumnMap = {}, used = new Set<number>();
+ for (const [f, i] of Object.entries(over) as [Field, number][]) if (i >= 0 && i < headers.length && !used.has(i)) { map[f] = i; used.add(i); }
  for (const f of [...NEEDS[kind], ...(OPTIONAL[kind] ?? [])]) {
+  if (map[f] !== undefined) continue;
   const i = h.findIndex((x, j) => !used.has(j) && SYN[f].some(s => x === s || x.includes(s)));
   if (i >= 0) { map[f] = i; used.add(i); }
  }
@@ -30,19 +36,23 @@ export function mapColumns(kind: FileKind, headers: string[]) {
 }
 
 const num = (v: string | undefined) => { const n = Number(String(v ?? '').trim().replace(/,(?=\d{3}\b)/g, '')); return Number.isFinite(n) ? n : NaN; };
-const iso = (v: string) => { const t = v.trim(); const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(t); if (m) return `${m[3].length === 2 ? '20' + m[3] : m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; return t.slice(0, 10); };
+const iso = (v: string) => parseDate(v)?.iso ?? v.trim().slice(0, 10);
+// El turno nocturno cruza la medianoche: calidad puede anotar el lote con el día siguiente.
+const dayBefore = (d: string) => { const t = Date.parse(`${d}T12:00:00Z`); return Number.isNaN(t) ? d : new Date(t - 864e5).toISOString().slice(0, 10); };
 const shift = (v: string) => { const f = fold(v); return f.startsWith('mat') || f === '1' || f.startsWith('mor') ? 'Matutino' : f.startsWith('ves') || f === '2' || f.startsWith('eve') ? 'Vespertino' : f.startsWith('noc') || f === '3' || f.startsWith('nig') ? 'Nocturno' : v.trim(); };
+const ORDER = ['Matutino', 'Vespertino', 'Nocturno'];
 const lineName = (v: string) => v.trim().toUpperCase().replace(/^LINEA\s*/i, 'L').replace(/^L(?=\d)/, 'L');
 
 export type Lot = { key: string; fecha: string; turno: string; linea: string; lote: string; plan: number; prod: number; prog: number; ciclo: number; rev?: number; rej?: number; defecto?: string };
 export type Stop = { fecha: string; turno: string; linea: string; min: number; causa: string };
 export type Exception = { rule: string; severity: 'alta' | 'media'; text: [string, string]; where: string };
 export type LineOee = { linea: string; prog: number; stops: number; run: number; ideal: number; prod: number; rej: number; A: number; R: number; Q: number; oee: number; lossStops: number; lossSpeed: number; lossQuality: number };
-export type Result = { lots: Lot[]; orphans: { fecha: string; turno: string; linea: string; lote: string; rev: number; rej: number }[]; stops: Stop[]; exceptions: Exception[]; lines: LineOee[]; total: { A: number; R: number; Q: number; oee: number }; pareto: [string, number][] };
+export type ShiftSum = { turno: string; plan: number; prod: number; rev: number; rej: number; stops: number; lots: number };
+export type Result = { shifts: ShiftSum[]; lots: Lot[]; orphans: { fecha: string; turno: string; linea: string; lote: string; rev: number; rej: number }[]; stops: Stop[]; exceptions: Exception[]; lines: LineOee[]; total: { A: number; R: number; Q: number; oee: number }; pareto: [string, number][] };
 
-export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLimit = 0.03): Result {
- const P = mapColumns('prod', prod.headers).map, Qm = mapColumns('qual', qual.headers).map, S = stops ? mapColumns('stops', stops.headers).map : null;
- const get = (r: string[], m: Partial<Record<Field, number>>, f: Field) => (m[f] === undefined ? '' : r[m[f]!] ?? '');
+export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLimit = 0.03, over: Partial<Record<FileKind, ColumnMap>> = {}): Result {
+ const P = mapColumns('prod', prod.headers, over.prod).map, Qm = mapColumns('qual', qual.headers, over.qual).map, S = stops ? mapColumns('stops', stops.headers, over.stops).map : null;
+ const get = (r: string[], m: ColumnMap, f: Field) => (m[f] === undefined ? '' : r[m[f]!] ?? '');
  const keyOf = (fecha: string, turno: string, linea: string, lote: string) => `${iso(fecha)}|${shift(turno)}|${lineName(linea)}|${lote.trim()}`;
  const lots: Lot[] = prod.rows.filter(r => r.some(v => v.trim())).map(r => ({
   key: keyOf(get(r, P, 'fecha'), get(r, P, 'turno'), get(r, P, 'linea'), get(r, P, 'lote')),
@@ -53,7 +63,9 @@ export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLi
  const orphans: Result['orphans'] = [];
  qual.rows.filter(r => r.some(v => v.trim())).forEach(r => {
   const k = keyOf(get(r, Qm, 'fecha'), get(r, Qm, 'turno'), get(r, Qm, 'linea'), get(r, Qm, 'lote'));
-  const rev = num(get(r, Qm, 'rev')), rej = num(get(r, Qm, 'rej')), lot = byKey.get(k);
+  const rev = num(get(r, Qm, 'rev')), rej = num(get(r, Qm, 'rej'));
+  let lot = byKey.get(k);
+  if (!lot && shift(get(r, Qm, 'turno')) === 'Nocturno') lot = byKey.get(keyOf(dayBefore(iso(get(r, Qm, 'fecha'))), get(r, Qm, 'turno'), get(r, Qm, 'linea'), get(r, Qm, 'lote')));
   if (lot) { lot.rev = (lot.rev ?? 0) + rev; lot.rej = (lot.rej ?? 0) + rej; lot.defecto = get(r, Qm, 'defecto').trim() || lot.defecto; }
   else orphans.push({ fecha: iso(get(r, Qm, 'fecha')), turno: shift(get(r, Qm, 'turno')), linea: lineName(get(r, Qm, 'linea')), lote: get(r, Qm, 'lote').trim(), rev, rej });
  });
@@ -87,7 +99,11 @@ export function consolidate(prod: Grid, qual: Grid, stops: Grid | null, rejectLi
  const T = lines.reduce((t, l) => ({ prog: t.prog + l.prog, run: t.run + l.run, ideal: t.ideal + l.ideal, prod: t.prod + l.prod, rej: t.rej + l.rej }), { prog: 0, run: 0, ideal: 0, prod: 0, rej: 0 });
  const A = T.prog ? T.run / T.prog : 0, R = T.run ? Math.min(1, T.ideal / T.run) : 0, Q = T.prod ? (T.prod - T.rej) / T.prod : 0;
  const causes = new Map<string, number>(); stopList.forEach(s => causes.set(s.causa || 'Sin causa', (causes.get(s.causa || 'Sin causa') ?? 0) + s.min));
- return { lots, orphans, stops: stopList, exceptions: ex.sort((a, b) => (a.severity === 'alta' ? 0 : 1) - (b.severity === 'alta' ? 0 : 1)), lines, total: { A, R, Q, oee: A * R * Q }, pareto: [...causes].sort((a, b) => b[1] - a[1]) };
+ const shifts: ShiftSum[] = [...new Set(lots.map(l => l.turno))].map(turno => {
+  const ls = lots.filter(l => l.turno === turno), sum = (f: (l: Lot) => number) => ls.reduce((a, l) => a + (Number.isNaN(f(l)) ? 0 : f(l)), 0);
+  return { turno, plan: sum(l => l.plan), prod: sum(l => l.prod), rev: sum(l => l.rev ?? 0), rej: sum(l => l.rej ?? 0), stops: stopList.filter(x => x.turno === turno).reduce((a, x) => a + x.min, 0), lots: ls.length };
+ }).sort((a, b) => ORDER.indexOf(a.turno) - ORDER.indexOf(b.turno));
+ return { shifts, lots, orphans, stops: stopList, exceptions: ex.sort((a, b) => (a.severity === 'alta' ? 0 : 1) - (b.severity === 'alta' ? 0 : 1)), lines, total: { A, R, Q, oee: A * R * Q }, pareto: [...causes].sort((a, b) => b[1] - a[1]) };
 }
 
 // Resumen para mandar por WhatsApp o pegar en un correo.

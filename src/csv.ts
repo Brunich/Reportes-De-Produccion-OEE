@@ -1,4 +1,5 @@
 import { toNumber } from './quality.ts';
+import { parseDate } from './dates.ts';
 export type CsvFixes = { blank: number; short: number; long: number };
 export type CsvData = { headers: string[]; rows: string[][]; fixes?: CsvFixes };
 
@@ -89,7 +90,7 @@ export function exportCsv(headers:string[],rows:string[][]):string {
 export type ColumnKind = 'number' | 'date' | 'category' | 'text';
 export type ColumnProfile = { name: string; kind: ColumnKind; filled: number; blanks: number; unique: number; top: [string, number][]; min?: number; max?: number; median?: number; numbers?: number[]; from?: string; to?: string; perDay?: [string, number][] };
 
-const isoOf = (v: string) => { const t = v.trim(); if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10); const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t); return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''; };
+const isoOf = (v: string) => parseDate(v)?.iso ?? '';
 
 export function profileColumns(headers: string[], rows: string[][]): ColumnProfile[] {
  return headers.map((name, index) => {
