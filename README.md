@@ -1,6 +1,6 @@
 # Planta: consolidador y OEE
 
-[![CI](https://github.com/Brunich/planta-oee/actions/workflows/ci.yml/badge.svg)](https://github.com/Brunich/planta-oee/actions/workflows/ci.yml)
+[![CI](https://github.com/Brunich/Reportes-De-Produccion-OEE/actions/workflows/ci.yml/badge.svg)](https://github.com/Brunich/Reportes-De-Produccion-OEE/actions/workflows/ci.yml)
 
 *Tres reportes, un OEE, cero copiar y pegar.*
 
@@ -46,6 +46,10 @@ npm run build   # tipos + build de producción
 ```
 
 Hecho con React 19, TypeScript y Vite. Necesita Node 22 o más nuevo (las pruebas corren TypeScript directo con Node).
+
+## Licencia
+
+[MIT](LICENSE). Úsalo, cámbialo y compártelo; sólo conserva el aviso de copyright.
 
 ---
 
